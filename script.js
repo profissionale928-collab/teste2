@@ -326,8 +326,10 @@ function formatarTelefone(numero, countryCode = '55') {
 
     // Se o número começar com o código do país (ex: 55 para Brasil), removemos
     // o código do país para que o número restante (DDD + Número) possa ser formatado.
-    // Isso é feito apenas se o número for muito longo (ex: 13 dígitos)
-    if (countryCode && numLimpo.startsWith(countryCode) && numLimpo.length > 11) {
+    // A remoção do código do país só deve ocorrer se o número tiver o código do país E o DDD E o número.
+    // Ex: 55 + 11 + 999999999 = 13 dígitos.
+    // Se o número for 10 ou 11 dígitos, ele já está no formato DDD + Número.
+    if (countryCode && numLimpo.startsWith(countryCode) && (numLimpo.length === 12 || numLimpo.length === 13)) {
         numLimpo = numLimpo.substring(countryCode.length);
     }
     
