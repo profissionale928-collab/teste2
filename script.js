@@ -98,20 +98,32 @@ async function handleSearch(e) {
 // Função de utilidade para extrair o telefone de um registro
 function extractPhone(empresa) {
     let phone = 'N/A';
-    // Tenta extrair o telefone de diferentes campos
-    const phoneData = empresa.company?.phone || empresa.phones?.[0] || empresa.phone;
+    let phoneData = null;
+
+    // Prioriza o objeto de telefone se for um array
+    if (Array.isArray(empresa.phones) && empresa.phones.length > 0) {
+        phoneData = empresa.phones[0];
+    } else {
+        // Tenta extrair o telefone de diferentes campos
+        phoneData = empresa.company?.phone || empresa.phone;
+    }
 
     if (typeof phoneData === 'string' && phoneData.trim() !== '') {
-        phone = phoneData;
+        // Se for uma string pura (ex: "11999999999"), tenta formatar
+        phone = formatarTelefone(phoneData);
     } else if (phoneData && typeof phoneData === 'object') {
         // A API CNPJjá pode retornar um objeto de telefone com 'number' e 'countryCode'
-        if (phoneData.number) {
-            // Formata o número de telefone, se possível
-            phone = formatarTelefone(phoneData.number, phoneData.countryCode);
-        } else if (phoneData.value) {
-            phone = formatarTelefone(phoneData.value);
+        const number = phoneData.number || phoneData.value;
+        const countryCode = phoneData.countryCode;
+
+        if (number) {
+            // Passa o número e o código do país para a função de formatação
+            phone = formatarTelefone(number, countryCode);
         }
-    } else if (Array.isArray(empresa.phones) && empresa.phones.length > 0) {
+    }
+    
+    // Se o telefone ainda for 'N/A' e houver um array de telefones, tenta o primeiro como fallback
+    if (phone === 'N/A' && Array.isArray(empresa.phones) && empresa.phones.length > 0) {
         const firstPhone = empresa.phones[0];
         if (typeof firstPhone === 'string' && firstPhone.trim() !== '') {
             phone = formatarTelefone(firstPhone);
@@ -119,6 +131,7 @@ function extractPhone(empresa) {
             phone = formatarTelefone(firstPhone.number || firstPhone.value, firstPhone.countryCode);
         }
     }
+
     return phone;
 }
 
@@ -324,13 +337,17 @@ function formatarTelefone(numero, countryCode = '55') {
     
     if (numLimpo.length === 0) return 'N/A';
 
-    // Se o número começar com o código do país (ex: 55 para Brasil), removemos
-    // o código do país para que o número restante (DDD + Número) possa ser formatado.
-    // A remoção do código do país só deve ocorrer se o número tiver o código do país E o DDD E o número.
-    // Ex: 55 + 11 + 999999999 = 13 dígitos.
-    // Se o número for 10 ou 11 dígitos, ele já está no formato DDD + Número.
-    if (countryCode && numLimpo.startsWith(countryCode) && (numLimpo.length === 12 || numLimpo.length === 13)) {
-        numLimpo = numLimpo.substring(countryCode.length);
+    // Se o número começar com o código do país (ex: 55 para Brasil)
+    if (countryCode && numLimpo.startsWith(countryCode)) {
+        // Verifica se o número restante (DDD + Número) tem 10 ou 11 dígitos,
+        // que são os tamanhos esperados para números de telefone brasileiros com DDD.
+        const remainingLength = numLimpo.length - countryCode.length;
+        if (remainingLength === 10 || remainingLength === 11) {
+            // Remove o código do país, mantendo o DDD e o número.
+            numLimpo = numLimpo.substring(countryCode.length);
+        }
+        // Se o remainingLength não for 10 ou 11, mantemos o número original (com o código do país)
+        // e deixamos a lógica de formatação abaixo tentar lidar com ele, ou retornar o número limpo.
     }
     
     // O número de telefone no Brasil (com DDD) tem 10 ou 11 dígitos.
@@ -346,7 +363,9 @@ function formatarTelefone(numero, countryCode = '55') {
         return `(${ddd}) ${parte1}-${parte2}`;
     } else {
         // Se não for possível formatar como BR, retornamos o número limpo completo
-        // para evitar truncamento.
+        // para evitar truncamento e garantir que o número completo seja exibido.
+        // Isso inclui casos como números internacionais ou números com mais de 11 dígitos que
+        // não foram corretamente formatados acima.
         return numLimpo;
     }
 }
