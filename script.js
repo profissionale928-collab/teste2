@@ -99,7 +99,15 @@ async function handleSearch(e) {
 function extractPhone(empresa) {
     let phone = 'N/A';
     let phoneData = null;
+    let inferredDDD = null;
 
+    // 1. Tenta inferir o DDD a partir do endereço (UF)
+    const uf = empresa.address?.state;
+    if (uf) {
+        inferredDDD = getDDDByState(uf);
+    }
+
+    // 2. Tenta extrair o número de telefone
     // Prioriza o objeto de telefone se for um array
     if (Array.isArray(empresa.phones) && empresa.phones.length > 0) {
         phoneData = empresa.phones[0];
@@ -109,26 +117,26 @@ function extractPhone(empresa) {
     }
 
     if (typeof phoneData === 'string' && phoneData.trim() !== '') {
-        // Se for uma string pura (ex: "11999999999"), tenta formatar
-        phone = formatarTelefone(phoneData);
+        // Se for uma string pura (ex: "11999999999" ou "40787834"), tenta formatar
+        phone = formatarTelefone(phoneData, '55', inferredDDD);
     } else if (phoneData && typeof phoneData === 'object') {
         // A API CNPJjá pode retornar um objeto de telefone com 'number' e 'countryCode'
         const number = phoneData.number || phoneData.value;
         const countryCode = phoneData.countryCode;
 
         if (number) {
-            // Passa o número e o código do país para a função de formatação
-            phone = formatarTelefone(number, countryCode);
+            // Passa o número, o código do país e o DDD inferido para a função de formatação
+            phone = formatarTelefone(number, countryCode, inferredDDD);
         }
     }
     
-    // Se o telefone ainda for 'N/A' e houver um array de telefones, tenta o primeiro como fallback
+    // 3. Fallback: Se o telefone ainda for 'N/A' e houver um array de telefones, tenta o primeiro como fallback
     if (phone === 'N/A' && Array.isArray(empresa.phones) && empresa.phones.length > 0) {
         const firstPhone = empresa.phones[0];
         if (typeof firstPhone === 'string' && firstPhone.trim() !== '') {
-            phone = formatarTelefone(firstPhone);
+            phone = formatarTelefone(firstPhone, '55', inferredDDD);
         } else if (firstPhone && (firstPhone.number || firstPhone.value)) {
-            phone = formatarTelefone(firstPhone.number || firstPhone.value, firstPhone.countryCode);
+            phone = formatarTelefone(firstPhone.number || firstPhone.value, firstPhone.countryCode, inferredDDD);
         }
     }
 
@@ -329,7 +337,7 @@ function showLoading(show) {
 }
 
 // Função para formatar telefone
-function formatarTelefone(numero, countryCode = '55') {
+function formatarTelefone(numero, countryCode = '55', inferredDDD = null) {
     if (!numero) return 'N/A';
     
     // Remove tudo que não é dígito
@@ -337,9 +345,7 @@ function formatarTelefone(numero, countryCode = '55') {
     
     if (numLimpo.length === 0) return 'N/A';
 
-    // A API pode retornar o número com ou sem o código do país (55).
-    // Para garantir que o DDD seja mantido, vamos primeiro tentar remover o código do país
-    // APENAS se o número tiver o formato completo (código do país + DDD + Número).
+    // 1. Tenta remover o código do país (55) se o número for longo o suficiente (12 ou 13 dígitos)
     if (countryCode && numLimpo.startsWith(countryCode)) {
         const numeroSemCountryCode = numLimpo.substring(countryCode.length);
         
@@ -349,7 +355,12 @@ function formatarTelefone(numero, countryCode = '55') {
         }
     }
     
-    // O número de telefone no Brasil (com DDD) tem 10 ou 11 dígitos.
+    // 2. Se o número for de 8 dígitos e houver um DDD inferido, prefixa o número.
+    if (numLimpo.length === 8 && inferredDDD) {
+        numLimpo = inferredDDD + numLimpo;
+    }
+
+    // 3. Formatação padrão brasileira (10 ou 11 dígitos).
     if (numLimpo.length === 11) { // Celular com 9 dígitos (ex: 11999999999)
         const ddd = numLimpo.substring(0, 2);
         const parte1 = numLimpo.substring(2, 7);
@@ -360,20 +371,22 @@ function formatarTelefone(numero, countryCode = '55') {
         const parte1 = numLimpo.substring(2, 6);
         const parte2 = numLimpo.substring(6, 10);
         return `(${ddd}) ${parte1}-${parte2}`;
-    } else if (numLimpo.length === 8) { // Número local de 8 dígitos (ex: 40787834) - Assume DDD 11
-        // **ATENÇÃO:** Esta é uma correção temporária que assume o DDD 11. 
-        // Se a aplicação for usada em outras regiões, o DDD deve ser obtido de outro campo da API (ex: endereço).
-        const ddd = '11';
-        const parte1 = numLimpo.substring(0, 4);
-        const parte2 = numLimpo.substring(4, 8);
-        return `(${ddd}) ${parte1}-${parte2}`;
     } else {
         // Se não for possível formatar como BR, retornamos o número limpo completo
         // para evitar truncamento e garantir que o número completo seja exibido.
-        // Isso inclui casos onde o número já veio com o DDD, mas a formatação falhou,
-        // ou casos internacionais.
         return numLimpo;
     }
+}
+
+// Função para inferir o DDD a partir da UF (Estado)
+function getDDDByState(uf) {
+    const dddMap = {
+        'AC': '68', 'AL': '82', 'AP': '96', 'AM': '92', 'BA': '71', 'CE': '85', 'DF': '61',
+        'ES': '27', 'GO': '62', 'MA': '98', 'MT': '65', 'MS': '67', 'MG': '31', 'PA': '91',
+        'PB': '83', 'PR': '41', 'PE': '81', 'PI': '86', 'RJ': '21', 'RN': '84', 'RS': '51',
+        'RO': '69', 'RR': '95', 'SC': '48', 'SP': '11', 'SE': '79', 'TO': '63'
+    };
+    return dddMap[uf.toUpperCase()] || null;
 }
 
 // Função para formatar CNPJ
