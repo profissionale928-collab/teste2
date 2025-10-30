@@ -337,17 +337,16 @@ function formatarTelefone(numero, countryCode = '55') {
     
     if (numLimpo.length === 0) return 'N/A';
 
-    // Se o número começar com o código do país (ex: 55 para Brasil)
+    // A API pode retornar o número com ou sem o código do país (55).
+    // Para garantir que o DDD seja mantido, vamos primeiro tentar remover o código do país
+    // APENAS se o número tiver o formato completo (código do país + DDD + Número).
     if (countryCode && numLimpo.startsWith(countryCode)) {
-        // Verifica se o número restante (DDD + Número) tem 10 ou 11 dígitos,
-        // que são os tamanhos esperados para números de telefone brasileiros com DDD.
-        const remainingLength = numLimpo.length - countryCode.length;
-        if (remainingLength === 10 || remainingLength === 11) {
-            // Remove o código do país, mantendo o DDD e o número.
-            numLimpo = numLimpo.substring(countryCode.length);
+        const numeroSemCountryCode = numLimpo.substring(countryCode.length);
+        
+        // Se o número restante tiver 10 (fixo) ou 11 (celular) dígitos, removemos o código do país.
+        if (numeroSemCountryCode.length === 10 || numeroSemCountryCode.length === 11) {
+            numLimpo = numeroSemCountryCode;
         }
-        // Se o remainingLength não for 10 ou 11, mantemos o número original (com o código do país)
-        // e deixamos a lógica de formatação abaixo tentar lidar com ele, ou retornar o número limpo.
     }
     
     // O número de telefone no Brasil (com DDD) tem 10 ou 11 dígitos.
@@ -364,8 +363,8 @@ function formatarTelefone(numero, countryCode = '55') {
     } else {
         // Se não for possível formatar como BR, retornamos o número limpo completo
         // para evitar truncamento e garantir que o número completo seja exibido.
-        // Isso inclui casos como números internacionais ou números com mais de 11 dígitos que
-        // não foram corretamente formatados acima.
+        // Isso inclui casos onde o número já veio com o DDD, mas a formatação falhou,
+        // ou casos internacionais.
         return numLimpo;
     }
 }
