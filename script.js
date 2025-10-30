@@ -99,63 +99,54 @@ async function handleSearch(e) {
 function extractPhone(empresa) {
     let phone = 'N/A';
     let phoneData = null;
-    let inferredDDD = null;
 
-    // 1. Tenta inferir o DDD a partir do endereço (UF)
-    const uf = empresa.address?.state;
-    if (uf) {
-        inferredDDD = getDDDByState(uf);
+    // A documentação da API indica que o telefone real está no array 'phones'
+    // e cada objeto dentro dele tem os campos 'area' (DDD) e 'number'.
+
+    // 1. Prioriza o array 'phones'
+    if (Array.isArray(empresa.phones) && empresa.phones.length > 0) {
+        phoneData = empresa.phones[0];
+        
+        // Se o objeto tiver 'area' e 'number', o DDD real foi encontrado.
+        if (phoneData.area && phoneData.number) {
+            // Concatena DDD e Número para formar o número completo (ex: "1140787834")
+            const fullNumber = phoneData.area + phoneData.number;
+            // Passa o número completo para a função de formatação.
+            return formatarTelefone(fullNumber, '55', null);
+        }
     }
 
-    // 2. Tenta extrair o número de telefone de forma mais robusta
+    // 2. Fallback para campos de string simples (se o array 'phones' não estiver no formato esperado)
     // Lista de possíveis campos de telefone, em ordem de prioridade
     const phoneFields = [
         empresa.company?.phone,
         empresa.phone,
-        empresa.phone_alt // Adicionando phone_alt, que apareceu na documentação
+        empresa.phone_alt
     ];
 
-    // 2.1. Prioriza o primeiro telefone do array 'phones' se existir
-    if (Array.isArray(empresa.phones) && empresa.phones.length > 0) {
-        phoneData = empresa.phones[0];
-    } else {
-        // 2.2. Busca nos campos de string/objeto
-        for (const field of phoneFields) {
-            if (field) {
-                phoneData = field;
-                break;
-            }
-        }
-    }
-
-    // 3. Processa o dado encontrado
-    if (typeof phoneData === 'string' && phoneData.trim() !== '') {
-        // Se for uma string pura, tenta formatar
-        phone = formatarTelefone(phoneData, '55', inferredDDD);
-    } else if (phoneData && typeof phoneData === 'object') {
-        // Se for um objeto (com number/value e countryCode)
-        const number = phoneData.number || phoneData.value;
-        const countryCode = phoneData.countryCode;
-
-        if (number) {
-            // Passa o número, o código do país e o DDD inferido para a função de formatação
-            phone = formatarTelefone(number, countryCode, inferredDDD);
+    for (const field of phoneFields) {
+        if (typeof field === 'string' && field.trim() !== '') {
+            // Se for uma string pura, tenta formatar.
+            // Se o número for de 8 dígitos, a formatação irá falhar e retornar o número limpo.
+            return formatarTelefone(field, '55', null);
         }
     }
     
-    // 4. Fallback: Se a extração falhou, tenta o primeiro item do array 'phones' novamente,
-    // caso ele seja um objeto ou string que não foi pego na primeira tentativa.
-    // Esta etapa é redundante, mas garante que o array 'phones' seja totalmente verificado.
-    if (phone === 'N/A' && Array.isArray(empresa.phones) && empresa.phones.length > 0) {
+    // 3. Fallback final: Se o array 'phones' existe mas não foi processado no passo 1
+    if (Array.isArray(empresa.phones) && empresa.phones.length > 0) {
         const firstPhone = empresa.phones[0];
         if (typeof firstPhone === 'string' && firstPhone.trim() !== '') {
-            phone = formatarTelefone(firstPhone, '55', inferredDDD);
-        } else if (firstPhone && (firstPhone.number || firstPhone.value)) {
-            phone = formatarTelefone(firstPhone.number || firstPhone.value, firstPhone.countryCode, inferredDDD);
+            return formatarTelefone(firstPhone, '55', null);
         }
     }
 
     return phone;
+}
+
+// Removendo a função getDDDByState e a lógica de inferência de DDD
+function getDDDByState(uf) {
+    // Esta função não é mais necessária, pois o DDD real deve vir da API no campo 'area'.
+    return null;
 }
 
 // Função de utilidade para extrair o email de um registro
@@ -352,7 +343,7 @@ function showLoading(show) {
 }
 
 // Função para formatar telefone
-function formatarTelefone(numero, countryCode = '55', inferredDDD = null) {
+function formatarTelefone(numero, countryCode = '55') {
     if (!numero) return 'N/A';
     
     // Remove tudo que não é dígito
@@ -370,12 +361,7 @@ function formatarTelefone(numero, countryCode = '55', inferredDDD = null) {
         }
     }
     
-    // 2. Se o número for de 8 dígitos e houver um DDD inferido, prefixa o número.
-    if (numLimpo.length === 8 && inferredDDD) {
-        numLimpo = inferredDDD + numLimpo;
-    }
-
-    // 3. Formatação padrão brasileira (10 ou 11 dígitos).
+    // 2. Formatação padrão brasileira (10 ou 11 dígitos).
     if (numLimpo.length === 11) { // Celular com 9 dígitos (ex: 11999999999)
         const ddd = numLimpo.substring(0, 2);
         const parte1 = numLimpo.substring(2, 7);
@@ -391,17 +377,6 @@ function formatarTelefone(numero, countryCode = '55', inferredDDD = null) {
         // para evitar truncamento e garantir que o número completo seja exibido.
         return numLimpo;
     }
-}
-
-// Função para inferir o DDD a partir da UF (Estado)
-function getDDDByState(uf) {
-    const dddMap = {
-        'AC': '68', 'AL': '82', 'AP': '96', 'AM': '92', 'BA': '71', 'CE': '85', 'DF': '61',
-        'ES': '27', 'GO': '62', 'MA': '98', 'MT': '65', 'MS': '67', 'MG': '31', 'PA': '91',
-        'PB': '83', 'PR': '41', 'PE': '81', 'PI': '86', 'RJ': '21', 'RN': '84', 'RS': '51',
-        'RO': '69', 'RR': '95', 'SC': '48', 'SP': '11', 'SE': '79', 'TO': '63'
-    };
-    return dddMap[uf.toUpperCase()] || null;
 }
 
 // Função para formatar CNPJ
