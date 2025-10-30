@@ -360,6 +360,13 @@ function formatarTelefone(numero, countryCode = '55') {
         const parte1 = numLimpo.substring(2, 6);
         const parte2 = numLimpo.substring(6, 10);
         return `(${ddd}) ${parte1}-${parte2}`;
+    } else if (numLimpo.length === 8) { // Número local de 8 dígitos (ex: 40787834) - Assume DDD 11
+        // **ATENÇÃO:** Esta é uma correção temporária que assume o DDD 11. 
+        // Se a aplicação for usada em outras regiões, o DDD deve ser obtido de outro campo da API (ex: endereço).
+        const ddd = '11';
+        const parte1 = numLimpo.substring(0, 4);
+        const parte2 = numLimpo.substring(4, 8);
+        return `(${ddd}) ${parte1}-${parte2}`;
     } else {
         // Se não for possível formatar como BR, retornamos o número limpo completo
         // para evitar truncamento e garantir que o número completo seja exibido.
