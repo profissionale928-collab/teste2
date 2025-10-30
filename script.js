@@ -107,20 +107,33 @@ function extractPhone(empresa) {
         inferredDDD = getDDDByState(uf);
     }
 
-    // 2. Tenta extrair o número de telefone
-    // Prioriza o objeto de telefone se for um array
+    // 2. Tenta extrair o número de telefone de forma mais robusta
+    // Lista de possíveis campos de telefone, em ordem de prioridade
+    const phoneFields = [
+        empresa.company?.phone,
+        empresa.phone,
+        empresa.phone_alt // Adicionando phone_alt, que apareceu na documentação
+    ];
+
+    // 2.1. Prioriza o primeiro telefone do array 'phones' se existir
     if (Array.isArray(empresa.phones) && empresa.phones.length > 0) {
         phoneData = empresa.phones[0];
     } else {
-        // Tenta extrair o telefone de diferentes campos
-        phoneData = empresa.company?.phone || empresa.phone;
+        // 2.2. Busca nos campos de string/objeto
+        for (const field of phoneFields) {
+            if (field) {
+                phoneData = field;
+                break;
+            }
+        }
     }
 
+    // 3. Processa o dado encontrado
     if (typeof phoneData === 'string' && phoneData.trim() !== '') {
-        // Se for uma string pura (ex: "11999999999" ou "40787834"), tenta formatar
+        // Se for uma string pura, tenta formatar
         phone = formatarTelefone(phoneData, '55', inferredDDD);
     } else if (phoneData && typeof phoneData === 'object') {
-        // A API CNPJjá pode retornar um objeto de telefone com 'number' e 'countryCode'
+        // Se for um objeto (com number/value e countryCode)
         const number = phoneData.number || phoneData.value;
         const countryCode = phoneData.countryCode;
 
@@ -130,7 +143,9 @@ function extractPhone(empresa) {
         }
     }
     
-    // 3. Fallback: Se o telefone ainda for 'N/A' e houver um array de telefones, tenta o primeiro como fallback
+    // 4. Fallback: Se a extração falhou, tenta o primeiro item do array 'phones' novamente,
+    // caso ele seja um objeto ou string que não foi pego na primeira tentativa.
+    // Esta etapa é redundante, mas garante que o array 'phones' seja totalmente verificado.
     if (phone === 'N/A' && Array.isArray(empresa.phones) && empresa.phones.length > 0) {
         const firstPhone = empresa.phones[0];
         if (typeof firstPhone === 'string' && firstPhone.trim() !== '') {
